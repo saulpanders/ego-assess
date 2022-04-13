@@ -57,8 +57,8 @@ func main() {
 
 	//using JSON as test data for now
 	postBody, _ := json.Marshal(map[string]string{
-		"name":  "Toby",
-		"email": "Toby@example.com",
+		"name":  "blah",
+		"email": "blah@example.com",
 	})
 	responseBody := bytes.NewBuffer(postBody)
 
