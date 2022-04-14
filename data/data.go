@@ -8,7 +8,8 @@
 	WORKING SSN GENERATOR!
 */
 
-package main
+//package main
+package data
 
 import (
 	"bufio"
@@ -65,16 +66,20 @@ func (datafile ExfilData) generate_data() []string {
 	return data
 }
 
-//main function
-func main() {
+//exported function
+func CreateDataFile(dataType string, dataSize int) string {
 	var datafile data
 
-	datafile = ExfilData{"ssn", 1, "Fake SSNs", "text"}
+	//fix hardcode later
+	datafile = ExfilData{dataType, dataSize, "Fake SSNs", "text"}
 
+	//file naming stuff- want it tagged by time
 	datetime := strings.ReplaceAll(time.Now().String(), " ", "")
 	datetime = strings.ReplaceAll(datetime, ":", "-")
 	datetime = datetime[:18]
-	f, err := os.Create("data.txt")
+
+	filename := datetime + "-local-data.txt"
+	f, err := os.Create(filename)
 
 	if err != nil {
 		log.Fatal(err)
@@ -82,7 +87,7 @@ func main() {
 
 	defer f.Close()
 
-	// create new buffer
+	// create new buffer for writing data to file
 	buffer := bufio.NewWriter(f)
 
 	for _, line := range datafile.generate_data() {
@@ -98,5 +103,8 @@ func main() {
 	}
 
 	fmt.Println("[+] done!")
+
+	//return filename so we can read it in client file
+	return filename
 
 }

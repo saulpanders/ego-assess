@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"flag"
 	//"encoding/json"
+	"ego-assess/data"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -90,7 +91,9 @@ func main() {
 	flag.IntVar(&dataSize, "size", 10, "size of data file for exfil (in MB)")
 	flag.Parse()
 
-	file, err := os.Open("data.txt")
+	filename := data.CreateDataFile(dataType, dataSize)
+
+	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatalf("Error while opening file. Err: %s", err)
 	}
