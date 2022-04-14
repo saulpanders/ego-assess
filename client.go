@@ -14,24 +14,27 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"flag"
+	//"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 )
 
 type Sender interface {
 	transmit()
 }
 
-type HttpClient struct {
-	Target string
-	Port   string
-	Data   *bytes.Buffer
+type Client struct {
+	Target   string
+	Port     string
+	Protocol string
+	Data     *bytes.Buffer
 }
 
 //Interface function - sets up the necessary things to transmit HTTP data
-func (client HttpClient) transmit() {
+func (client Client) transmitHTTP() {
 	url := "http://" + client.Target + ":" + client.Port + "/"
 
 	//Leverage Go's HTTP Post function to make request
@@ -42,7 +45,7 @@ func (client HttpClient) transmit() {
 		log.Fatalf("An Error Occured %v", err)
 	}
 	defer resp.Body.Close()
-	//Read the response body
+	//Read the response body --> not strictly necessary, would prob suffice to 200
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatalln(err)
@@ -51,18 +54,52 @@ func (client HttpClient) transmit() {
 	log.Printf(sb)
 }
 
+//Interface function - sets up the necessary things to transmit HTTP data
+func (client Client) transmit() {
+	switch client.Protocol {
+	case "HTTP":
+		client.transmitHTTP()
+	default:
+		log.Fatal("[x] please choose a supported client protocol")
+	}
+}
+
 //main function
 func main() {
 	var client Sender
 
-	//using JSON as test data for now
-	postBody, _ := json.Marshal(map[string]string{
-		"name":  "blah",
-		"email": "blah@example.com",
-	})
-	responseBody := bytes.NewBuffer(postBody)
+	var (
+		remoteHost    string
+		remotePort    string
+		exfilProtocol string
+		username      string
+		password      string
 
-	client = HttpClient{"127.0.0.1", "8080", responseBody}
+		//future data args
+		dataType string
+		dataSize int
+	)
+
+	//should prob make this by protocol, not port but ehhh
+	flag.StringVar(&exfilProtocol, "protocol", "HTTP", "protocol for exfil")
+	flag.StringVar(&remoteHost, "target", "127.0.0.1", "target host/exfil server")
+	flag.StringVar(&remotePort, "port", "8080", "remote server exfil port")
+	flag.StringVar(&username, "user", "testuser", "username (for SSH/SFTP")
+	flag.StringVar(&password, "password", "test1234", "password (for SSH/SFTP)")
+	flag.StringVar(&dataType, "datatype", "ssn", "type of data for exfil (SSN or CC)")
+	flag.IntVar(&dataSize, "size", 10, "size of data file for exfil (in MB)")
+	flag.Parse()
+
+	file, err := os.Open("data.txt")
+	if err != nil {
+		log.Fatalf("Error while opening file. Err: %s", err)
+	}
+	defer file.Close()
+
+	fileBuffer := new(bytes.Buffer)
+	fileBuffer.ReadFrom(file)
+	contents := bytes.NewBuffer(fileBuffer.Bytes())
+	client = Client{remoteHost, remotePort, exfilProtocol, contents}
 	client.transmit()
 
 }

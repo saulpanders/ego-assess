@@ -16,6 +16,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
@@ -41,7 +42,7 @@ type Server struct {
 
 	//for SSH/SFTP
 	Username string
-	Password String
+	Password string
 }
 
 //Struct method - sets up the necessary things to serve HTTP
@@ -66,16 +67,43 @@ func (server Server) serveHTTP() {
 
 //HTTP Handler, used to parse response from client
 func httpHandler(w http.ResponseWriter, r *http.Request) {
+	//possibly add special header check here?
 	switch r.Method {
 	case "GET":
-		fmt.Fprintf(w, "This is GET request at path = %s", r.URL.Path)
+		fmt.Fprintf(w, "[!] This is GET request at path = %s", r.URL.Path)
 	case "POST":
 		//possibly add base64 deserialization here
 		data, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			log.Fatal("[-] Error parsing request body: ", err)
 		}
-		fmt.Fprintf(w, "POST req made at %s with body %s", r.URL.Path, data)
+
+		//write responde body
+		fmt.Fprintf(w, "POST req made at %s from %s", r.URL.Path, r.RemoteAddr)
+		//log info server-side
+		fmt.Printf("[+] POST req made at %s from %s\n", r.URL.Path, r.RemoteAddr)
+		fmt.Println("[+] writing exfil to file..")
+		//write exfil data to file
+		f, err := os.Create("exfil.txt")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		defer f.Close()
+
+		// create new buffer to write exfil --> possibly break into util function?
+		buffer := bufio.NewWriter(f)
+
+		_, err = buffer.Write(data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := buffer.Flush(); err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println("[+] exfil done!")
+
 	default:
 		fmt.Fprintf(w, "Request method %s is not supported", r.Method)
 	}
@@ -212,7 +240,7 @@ func (server Server) serve() {
 	case "SFTP":
 		server.serveSFTP()
 	default:
-		log.Fatal("please choose a supported server")
+		log.Fatal("[x] please choose a supported server protocol")
 	}
 
 }
@@ -229,7 +257,7 @@ func main() {
 	)
 
 	//flag.BoolVar(&debugStderr, "e", false, "debug to stderr")
-	flag.StringVar(&serverType, "server", "xxx", "server protocol")
+	flag.StringVar(&serverType, "type", "HTTP", "server protocol (HTTP/HTTPS/SFTP/DNS/ICMP)")
 	flag.StringVar(&serverPort, "port", "1234", "server port")
 	flag.StringVar(&serverUser, "user", "testuser", "username (for SSH/SFTP")
 	flag.StringVar(&serverPort, "password", "test1234", "password (for SSH/SFTP)")
