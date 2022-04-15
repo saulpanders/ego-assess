@@ -121,7 +121,7 @@ func (server Server) serveSFTP() {
 			// a production setting.
 			fmt.Fprintf(debugStream, "Login: %s\n", c.User())
 			//specify this from command line args
-			if c.User() == server.Username && string(pass) == server.Password {
+			if c.User() == server.Username && string(pass[:]) == server.Password {
 				return nil, nil
 			}
 			return nil, fmt.Errorf("password rejected for %q", c.User())
@@ -260,15 +260,13 @@ func main() {
 	flag.StringVar(&serverType, "type", "HTTP", "server protocol (HTTP/HTTPS/SFTP/DNS/ICMP)")
 	flag.StringVar(&serverPort, "port", "1234", "server port")
 	flag.StringVar(&serverUser, "user", "testuser", "username (for SSH/SFTP")
-	flag.StringVar(&serverPort, "password", "test1234", "password (for SSH/SFTP)")
+	flag.StringVar(&serverPass, "password", "test1234", "password (for SSH/SFTP)")
 	flag.Parse()
 
 	//debugStream := ioutil.Discard
 	//if debugStderr {
 	//	debugStream = os.Stderr
 	//}
-
-	//server = Server{"HTTP, "8080"}
 
 	server = Server{serverType, serverPort, serverUser, serverPass}
 	server.serve()
