@@ -3,11 +3,18 @@
 	client.go (ego-assess)
 	inspired by Egress-Assess, multi-protocol DLP test solution
 
-	implement HTTP version first (easiest)
+	TODO:
+	- FTP Client
+	- HTTPS Client
+		working https client!
+		specify flag toggle for allow insecure?
+	- DNSTXT Client
+	- ICMP Client
 
-	BASIC CLIENT WORKS!
-
-	TODO: Client side command line arg logic
+	general refactoring?
+	(optional)
+	- DNS NS
+	- SMTP
 */
 
 package main
@@ -15,6 +22,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"path/filepath"
@@ -42,6 +50,19 @@ type Client struct {
 	Username string
 	Password string
 	Data     *bytes.Buffer
+}
+
+/*
+
+refactor into utils later
+*/
+func getDateTime() string {
+	// leave your mark ---> FACTOR THIS INTO SEPARATE FILE?
+	//file naming stuff- want it tagged by time
+	datetime := strings.ReplaceAll(time.Now().String(), " ", "")
+	datetime = strings.ReplaceAll(datetime, ":", "-")
+	datetime = string(datetime[:18])
+	return datetime
 }
 
 //ripped this from somewhere: checks known_hosts for current user to use with SSH config. May be unneccessary
@@ -115,12 +136,8 @@ func (client Client) transmitSFTP() {
 	}
 	defer sftpclient.Close()
 
-	// leave your mark ---> FACTOR THIS INTO SEPARATE FILE?
-	//file naming stuff- want it tagged by time
-	datetime := strings.ReplaceAll(time.Now().String(), " ", "")
-	datetime = strings.ReplaceAll(datetime, ":", "-")
-	datetime = datetime[:18]
-
+	//write remote file
+	datetime := getDateTime()
 	filename := datetime + "-remote-data.txt"
 
 	f, err := sftpclient.Create(filename)
@@ -154,6 +171,33 @@ func (client Client) transmitHTTP() {
 		log.Fatalf("An Error Occured %v", err)
 	}
 	defer resp.Body.Close()
+	//Read the response body --> not strictly necessary, wousld prob suffice to check for 200
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	sb := string(body)
+	log.Printf(sb)
+}
+
+//sets up the necessary things to transmit HTTP data
+func (client Client) transmitHTTPS() {
+	url := "https://" + client.Target + ":" + client.Port + "/secure"
+
+	//allow insecure HTTPS for now
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	https := &http.Client{Transport: tr}
+
+	//Leverage Go's HTTP Post function to make request
+	resp, err := https.Post(url, "application/json", client.Data)
+
+	//Handle Error
+	if err != nil {
+		log.Fatalf("An Error Occured %v", err)
+	}
+	defer resp.Body.Close()
 	//Read the response body --> not strictly necessary, would prob suffice to check for 200
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -168,6 +212,8 @@ func (client Client) transmit() {
 	switch client.Protocol {
 	case "HTTP":
 		client.transmitHTTP()
+	case "HTTPS":
+		client.transmitHTTPS()
 	case "SFTP":
 		client.transmitSFTP()
 	default:

@@ -3,14 +3,24 @@
 	.go (ego-assess)
 	inspired by Egress-Assess, multi-protocol DLP test solution
 
-	Implement HTTP version first
 
 	https://shareablecode.com/snippets/golang-http-server-post-request-example-how-handle-payload-body-form-data-go-AuUN-ztyc
 	https://golangbyexample.com/basic-http-server-go/
 
-	BASIC SERVER WORKING! Can listen and respond to GET/POST requests
+	TODO:
+	- FTP Server
+	- HTTPS Server
+		working HTTPS server!
+		add flags for cert&key specification
+		port gencert.go into something else
+		add letsencrypt support
+	- DNSTXT Server
+	- ICMP Server
 
-	TODO: Basic command-line arg parsing
+	general refactoring?
+	(optional)
+	- DNS NS
+	- SMTP
 */
 
 package main
@@ -19,16 +29,29 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
-
-	"github.com/pkg/sftp"
-	"golang.org/x/crypto/ssh"
+	"strings"
+	"time"
 )
+
+/*
+	refactor this to utils later?
+
+*/
+func getDateTime() string {
+	//file naming stuff- want it tagged by time
+	datetime := strings.ReplaceAll(time.Now().String(), " ", "")
+	datetime = strings.ReplaceAll(datetime, ":", "-")
+	datetime = string(datetime[:18])
+	return datetime
+}
 
 //practicing writing interfaces
 type Receiver interface {
@@ -65,6 +88,27 @@ func (server Server) serveHTTP() {
 	}
 }
 
+//Struct method - sets up the necessary things to serve HTTPS
+//using gencert.go for self-sgned cert at this point.. add letsencrypt support?
+// disable SSL cecks in powershel? [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+func (server Server) serveHTTPS() {
+	//Create the default mux
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/secure", httpHandler)
+
+	//Create the server.
+	serverInstance := &http.Server{
+		Addr:    ":" + server.Port,
+		Handler: mux,
+	}
+
+	err := serverInstance.ListenAndServeTLS("server.crt", "server.key")
+	if err != nil {
+		log.Fatal("[-] HTTPS Server Error: ", err)
+	}
+}
+
 //HTTP Handler, used to parse response from client
 func httpHandler(w http.ResponseWriter, r *http.Request) {
 	//possibly add special header check here?
@@ -83,8 +127,12 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		//log info server-side
 		fmt.Printf("[+] POST req made at %s from %s\n", r.URL.Path, r.RemoteAddr)
 		fmt.Println("[+] writing exfil to file..")
+
 		//write exfil data to file
-		f, err := os.Create("exfil.txt")
+
+		datetime := getDateTime()
+		filename := datetime + "-remote-data.txt"
+		f, err := os.Create(filename)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -109,6 +157,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+//ripped this mostly from the standard package examples
 func (server Server) serveSFTP() {
 	//hard coding this for tesitng purposes
 	debugStream := os.Stderr
@@ -206,16 +255,6 @@ func (server Server) serveSFTP() {
 			sftp.WithDebug(debugStream),
 		}
 
-		//read-only toggle, removed for now
-		/*
-			if readOnly {
-				serverOptions = append(serverOptions, sftp.ReadOnly())
-				fmt.Fprintf(debugStream, "Read-only server\n")
-			} else {
-				fmt.Fprintf(debugStream, "Read write server\n")
-			}
-		*/
-
 		server, err := sftp.NewServer(
 			channel,
 			serverOptions...,
@@ -237,6 +276,8 @@ func (server Server) serve() {
 	switch server.Protocol {
 	case "HTTP":
 		server.serveHTTP()
+	case "HTTPS":
+		server.serveHTTPS()
 	case "SFTP":
 		server.serveSFTP()
 	default:
@@ -255,6 +296,11 @@ func main() {
 		serverUser string
 		serverPass string
 	)
+
+	/*
+		add option to specifcy SSL certs, otherwise it will generate the self-sgined one
+
+	*/
 
 	//flag.BoolVar(&debugStderr, "e", false, "debug to stderr")
 	flag.StringVar(&serverType, "type", "HTTP", "server protocol (HTTP/HTTPS/SFTP/DNS/ICMP)")

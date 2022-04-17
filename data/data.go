@@ -4,8 +4,6 @@
 	inspired by Egress-Assess, multi-protocol DLP test solution
 
 	TODO: Client side logic for generative credit cards
-
-	WORKING SSN GENERATOR!
 */
 
 //package main
@@ -66,17 +64,22 @@ func (datafile ExfilData) generate_data() []string {
 	return data
 }
 
-//exported function
+func getDateTime() string {
+	//file naming stuff- want it tagged by time
+	datetime := strings.ReplaceAll(time.Now().String(), " ", "")
+	datetime = strings.ReplaceAll(datetime, ":", "-")
+	datetime = string(datetime[:18])
+	return datetime
+}
+
+//exported function -- called from Client
 func CreateDataFile(dataType string, dataSize int) string {
 	var datafile data
 
 	//fix hardcode later
 	datafile = ExfilData{dataType, dataSize, "Fake SSNs", "text"}
 
-	//file naming stuff- want it tagged by time
-	datetime := strings.ReplaceAll(time.Now().String(), " ", "")
-	datetime = strings.ReplaceAll(datetime, ":", "-")
-	datetime = datetime[:18]
+	datetime := getDateTime()
 
 	filename := datetime + "-local-data.txt"
 	f, err := os.Create(filename)
