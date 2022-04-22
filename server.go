@@ -9,6 +9,7 @@
 
 	TODO:
 	- FTP Server
+		ideas: https://betterprogramming.pub/how-to-write-a-concurrent-ftp-server-in-go-part-1-3904f2e3a9e5
 	- HTTPS Server
 		working HTTPS server!
 		add flags for cert&key specification
@@ -27,10 +28,12 @@ package main
 
 import (
 	"bufio"
+	"ego-assess/data"
 	"flag"
 	"fmt"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/net/icmp"
 	"io"
 	"io/ioutil"
 	"log"
@@ -66,6 +69,7 @@ type Server struct {
 	//for SSH/SFTP
 	Username string
 	Password string
+	IP       string
 }
 
 //Struct method - sets up the necessary things to serve HTTP
@@ -102,6 +106,8 @@ func (server Server) serveHTTPS() {
 		Addr:    ":" + server.Port,
 		Handler: mux,
 	}
+
+	data.GenerateSelfSignedCert()
 
 	err := serverInstance.ListenAndServeTLS("server.crt", "server.key")
 	if err != nil {
@@ -271,6 +277,30 @@ func (server Server) serveSFTP() {
 	}
 }
 
+//should technically be called ListenICMP but ehhh
+//testing icmp listening functionality
+func (server Server) serveICMP() {
+	conn, err := icmp.ListenPacket("ip4:icmp", server.IP)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		var msg []byte
+		length, sourceIP, err := conn.ReadFrom(msg)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		//if msg != nil {
+		log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
+		//}
+	}
+	_ = conn.Close()
+
+}
+
 //Interface function - switches between server struct implementations
 func (server Server) serve() {
 	switch server.Protocol {
@@ -280,6 +310,8 @@ func (server Server) serve() {
 		server.serveHTTPS()
 	case "SFTP":
 		server.serveSFTP()
+	case "ICMP":
+		server.serveICMP()
 	default:
 		log.Fatal("[x] please choose a supported server protocol")
 	}
@@ -295,6 +327,7 @@ func main() {
 		serverPort string
 		serverUser string
 		serverPass string
+		serverIP   string
 	)
 
 	/*
@@ -307,6 +340,7 @@ func main() {
 	flag.StringVar(&serverPort, "port", "1234", "server port")
 	flag.StringVar(&serverUser, "user", "testuser", "username (for SSH/SFTP")
 	flag.StringVar(&serverPass, "password", "test1234", "password (for SSH/SFTP)")
+	flag.StringVar(&serverIP, "ip", "127.0.0.1", "IP address to listen on (for ICMP, optional)")
 	flag.Parse()
 
 	//debugStream := ioutil.Discard
@@ -314,6 +348,6 @@ func main() {
 	//	debugStream = os.Stderr
 	//}
 
-	server = Server{serverType, serverPort, serverUser, serverPass}
+	server = Server{serverType, serverPort, serverUser, serverPass, serverIP}
 	server.serve()
 }
