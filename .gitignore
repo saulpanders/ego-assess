@@ -1,2 +1,4 @@
 *.txt
 *.exe
+*.crt
+*.key
