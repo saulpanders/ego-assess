@@ -295,13 +295,9 @@ func (server Server) serveICMP() {
 			continue
 		}
 
-		if msg != nil{
-		log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
-		}
+		if msg != nil {
+			log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
 
-		if (sourceIp == "72.83.232.7")
-			//hack for now?
-			log.Printf("yoooo")
 		}
 	}
 	_ = conn.Close()
