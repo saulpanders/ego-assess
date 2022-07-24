@@ -14,7 +14,7 @@
 		working HTTPS server!
 		add flags for cert&key specification
 		port gencert.go into something else
-		add letsencrypt support
+		add letsencrypt support?
 	- DNSTXT Server
 	- ICMP Server
 
@@ -279,6 +279,8 @@ func (server Server) serveSFTP() {
 
 //should technically be called ListenICMP but ehhh
 //testing icmp listening functionality
+//WORKING SEND/RECIEVE ICMP!!
+//add logic for base64 encoding and signaliing server to start transfer...
 func (server Server) serveICMP() {
 	conn, err := icmp.ListenPacket("ip4:icmp", server.IP)
 	if err != nil {
@@ -293,9 +295,14 @@ func (server Server) serveICMP() {
 			continue
 		}
 
-		//if msg != nil {
+		if msg != nil{
 		log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
-		//}
+		}
+
+		if (sourceIp == "72.83.232.7")
+			//hack for now?
+			log.Printf("yoooo")
+		}
 	}
 	_ = conn.Close()
 
