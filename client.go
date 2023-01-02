@@ -311,7 +311,8 @@ func (client Client) transmitICMP() {
 
 	hbytes := bytes.NewBuffer([]byte(transmitHeader))
 
-	hbytes.ReadFrom(client.Data)
+	//uncomment to send whole data file
+	//hbytes.ReadFrom(client.Data)
 
 	client.Data = hbytes
 	full := client.Data.Len()

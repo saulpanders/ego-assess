@@ -297,16 +297,15 @@ func (server Server) serveICMP() {
 			log.Println(err)
 			continue
 		}
+		if sourceIP.String() == clientIP.String() {
+			log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
 
+		}
 		if bytes.Contains(msg, []byte(".:::-989-:::.")) {
 			log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
 			clientIP = sourceIP
 		}
 
-		if sourceIP.String() == clientIP.String() {
-			log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
-
-		}
 	}
 	_ = conn.Close()
 
