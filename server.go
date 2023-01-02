@@ -29,6 +29,7 @@ package main
 import (
 	"bufio"
 	"ego-assess/data"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"github.com/pkg/sftp"
@@ -288,11 +289,15 @@ func (server Server) serveICMP() {
 	}
 
 	for {
-		var msg []byte
+		msg := make([]byte, 1500)
 		length, sourceIP, err := conn.ReadFrom(msg)
 		if err != nil {
 			log.Println(err)
 			continue
+		}
+
+		if bytes.Contains(msg, []byte(".:::-989-:::.")) {
+			log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
 		}
 
 		if msg != nil {

