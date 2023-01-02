@@ -285,7 +285,7 @@ func (server Server) serveSFTP() {
 //add logic for base64 encoding and signaliing server to start transfer...
 func (server Server) serveICMP() {
 	conn, err := icmp.ListenPacket("ip4:icmp", server.IP)
-	var clientIP string
+	var clientIP net.Addr
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func (server Server) serveICMP() {
 			clientIP = sourceIP
 		}
 
-		if sourceIP == clientIP {
+		if sourceIP.String() == clientIP.String() {
 			log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
 
 		}
