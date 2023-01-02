@@ -24,7 +24,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"ego-assess/data"
-	//"encoding/base64"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"flag"
@@ -305,14 +305,15 @@ func (client Client) transmitICMP() {
 	totalPackets := 0
 	bytesRead := 0
 	var icmpSample icmp
-
+	var encodedData []byte
+	var encodedDataString string
 	//icmp starttransmit signature
 	var transmitHeader = ".:::-989-:::."
 
 	hbytes := bytes.NewBuffer([]byte(transmitHeader))
 
 	//uncomment to send whole data file
-	//hbytes.ReadFrom(client.Data)
+	hbytes.ReadFrom(client.Data)
 
 	client.Data = hbytes
 	full := client.Data.Len()
@@ -327,8 +328,10 @@ func (client Client) transmitICMP() {
 		if !(bytesRead < full) {
 			break
 		}
-
-		_, err := Ping(client.Target, client.Data.Next(len(icmpSample.data)))
+		encodedData = []byte(client.Data.Next(len(icmpSample.data)))
+		encodedDataString = base64.StdEncoding.EncodeToString(encodedData)
+		encodedData = []byte(encodedDataString)
+		_, err := Ping(client.Target, encodedData)
 		if err != nil {
 			fmt.Printf("Error: %s", err)
 		}
