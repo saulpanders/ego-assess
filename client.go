@@ -24,7 +24,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"ego-assess/data"
-	"encoding/base64"
+	//"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"flag"

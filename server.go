@@ -28,8 +28,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"ego-assess/data"
-	"encoding/base64"
+	//"encoding/base64"
 	"flag"
 	"fmt"
 	"github.com/pkg/sftp"
