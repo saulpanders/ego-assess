@@ -293,20 +293,22 @@ func (server Server) serveICMP() {
 	for {
 		msg := make([]byte, 1500)
 		length, sourceIP, err := conn.ReadFrom(msg)
-		decodedMessage := base64.StdEncoding.DecodeString(string(msg))
-
 		if err != nil {
 			log.Println(err)
 			continue
 		}
+
+		blob := string(msg[8:])
+		decodedMessage := base64.StdEncoding.DecodeString(blob)
+
 		if sourceIP.String() == clientIP {
-			log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
+			log.Printf("message = '%s', length = %d, source-ip = %s", string(decodedMessage), length, sourceIP)
 
 		}
 		/*
 		if bytes.Contains(msg, []byte(".:::-989-:::.")) { */
-		if strings.Contains(decodedMessage, ".:::-989-:::.")
-			log.Printf("message = '%s', length = %d, source-ip = %s", string(msg), length, sourceIP)
+		if bytes.Contains(decodedMessage, ".:::-989-:::.")
+			log.Printf("message = '%s', length = %d, source-ip = %s", string(decodedMessage), length, sourceIP)
 			clientIP = sourceIP.String()
 		}
 
