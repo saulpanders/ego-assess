@@ -14,9 +14,10 @@
 		working HTTPS server!
 		add flags for cert&key specification
 		port gencert.go into something else
-		add letsencrypt support?
+		add letsencrypt support? (autocert)
 	- DNSTXT Server
 	- ICMP Server
+			mostly done, just need bug testing & outfile writing
 
 	general refactoring?
 	(optional)
@@ -30,7 +31,7 @@ import (
 	"bufio"
 	"bytes"
 	"ego-assess/data"
-	//"encoding/base64"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"github.com/pkg/sftp"
@@ -72,6 +73,19 @@ type Server struct {
 	Username string
 	Password string
 	IP       string
+}
+
+func writeOufile(filename, text) {
+	f, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		panic(err)
+	}
+
+	defer f.Close()
+
+	if _, err = f.WriteString(text); err != nil {
+		panic(err)
+	}
 }
 
 //Struct method - sets up the necessary things to serve HTTP
@@ -286,6 +300,7 @@ func (server Server) serveSFTP() {
 func (server Server) serveICMP() {
 	conn, err := icmp.ListenPacket("ip4:icmp", server.IP)
 	clientIP := "0.0.0.0"
+	filename := "temp"
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -299,19 +314,22 @@ func (server Server) serveICMP() {
 		}
 
 		blob := string(msg[8:])
-		decodedMessage := base64.StdEncoding.DecodeString(blob)
+		decodedMessage, _ := base64.StdEncoding.DecodeString(blob)
 
 		if sourceIP.String() == clientIP {
 			log.Printf("message = '%s', length = %d, source-ip = %s", string(decodedMessage), length, sourceIP)
+			writeOufile(filename, decodedMessage)
 
 		}
-		/*
-		if bytes.Contains(msg, []byte(".:::-989-:::.")) { */
-		if bytes.Contains(decodedMessage, ".:::-989-:::.")
+		if bytes.Contains(decodedMessage, []byte(".:::-989-:::.")) {
 			log.Printf("message = '%s', length = %d, source-ip = %s", string(decodedMessage), length, sourceIP)
 			clientIP = sourceIP.String()
-		}
 
+			//create outfile in this if statement since this should be the start of the transmission. Afer that we use IP to track the client
+			datetime := getDateTime()
+			filename = datetime + "-remote-data.txt"
+			writeOufile(filename, decodedMessage)
+			
 
 	}
 	_ = conn.Close()

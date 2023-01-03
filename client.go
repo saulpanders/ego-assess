@@ -10,6 +10,7 @@
 		specify flag toggle for allow insecure?
 	- DNSTXT Client
 	- ICMP Client
+			should be mostly done, added b64 support (just bug testing)
 
 	general refactoring?
 	(optional)
@@ -313,7 +314,7 @@ func (client Client) transmitICMP() {
 	hbytes := bytes.NewBuffer([]byte(transmitHeader))
 
 	//uncomment to send whole data file
-	//hbytes.ReadFrom(client.Data)
+	hbytes.ReadFrom(client.Data)
 
 	client.Data = hbytes
 	full := client.Data.Len()
@@ -328,6 +329,7 @@ func (client Client) transmitICMP() {
 		if !(bytesRead < full) {
 			break
 		}
+		//encoding the data chunk by chunk
 		encodedData = []byte(client.Data.Next(len(icmpSample.data)))
 		encodedDataString = base64.StdEncoding.EncodeToString(encodedData)
 		encodedData = []byte(encodedDataString)
